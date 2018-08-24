@@ -6,4 +6,10 @@
     <RootNamespace>albiondata_deduper_dotNet</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.2.5" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Redis" Version="2.1.2" />
+    <PackageReference Include="NATS.Client" Version="0.8.1" />
+  </ItemGroup>
+
 </Project>
