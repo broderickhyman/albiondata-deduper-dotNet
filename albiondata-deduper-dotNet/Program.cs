@@ -6,6 +6,7 @@ using StackExchange.Redis;
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace albiondata_deduper_dotNet
 {
@@ -24,6 +25,8 @@ namespace albiondata_deduper_dotNet
 
     public static ILoggerFactory LoggerFactory { get; } = new LoggerFactory().AddConsole();
     public static ILogger CreateLogger<T>() => LoggerFactory.CreateLogger<T>();
+
+    private static ManualResetEvent quitEvent = new ManualResetEvent(false);
 
     private static readonly Lazy<ConnectionMultiplexer> lazyRedis = new Lazy<ConnectionMultiplexer>(() =>
     {
@@ -68,6 +71,12 @@ namespace albiondata_deduper_dotNet
 
     private void OnExecute()
     {
+      Console.CancelKeyPress += (sender, args) =>
+      {
+        quitEvent.Set();
+        args.Cancel = true;
+      };
+
       var logger = CreateLogger<Program>();
       logger.LogInformation(RedisAddress);
       logger.LogInformation(NatsUrl);
@@ -75,12 +84,22 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
       logger.LogInformation($"NATS Connected, ID: {NatsConnection.ConnectedId}");
-      var incomingMarketOrders = NatsConnection.SubscribeAsync("marketorders.ingest");
+      var incomingMarketOrders = NatsConnection.SubscribeAsync(MarketOrder.MarketOrdersIngest);
+      var incomingMapData = NatsConnection.SubscribeAsync("mapdata.ingest");
+      var incomingGoldData = NatsConnection.SubscribeAsync("goldprices.ingest");
 
       incomingMarketOrders.MessageHandler += HandleMarketOrder;
-      incomingMarketOrders.Start();
+      incomingMapData.MessageHandler += HandleMapData;
+      incomingGoldData.MessageHandler += HandleGoldData;
 
-      Console.ReadKey();
+      incomingMarketOrders.Start();
+      logger.LogInformation("Listening for Market Order Data");
+      incomingMapData.Start();
+      logger.LogInformation("Listening for Map Data");
+      incomingGoldData.Start();
+      logger.LogInformation("Listening for Gold Data");
+
+      quitEvent.WaitOne();
       NatsConnection.Close();
       RedisConnection.Dispose();
     }
@@ -89,40 +108,108 @@ namespace albiondata_deduper_dotNet
     {
       var logger = CreateLogger<Program>();
       var message = args.Message;
-      var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
-      using (var md5 = MD5.Create())
+      try
       {
-        logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders");
-        foreach (var order in marketUpload.Orders)
+        var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
+        using (var md5 = MD5.Create())
         {
-          var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
-          var key = $"{message.Subject}-{hash}";
-          if (!IsDupedMessage(key))
+          logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders");
+          foreach (var order in marketUpload.Orders)
           {
-            NatsConnection.Publish("marketorders.dedupedtest", Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+            var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
+            var key = $"{message.Subject}-{hash}";
+            if (!IsDupedMessage(logger, key))
+            {
+              NatsConnection.Publish(MarketOrder.MarketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+            }
           }
         }
       }
-    }
-
-    private static bool IsDupedMessage(string key)
-    {
-      var value = RedisCache.StringGet(key);
-      if (value.IsNullOrEmpty)
+      catch (Exception ex)
       {
-        // No value means we have not seen it before
-        SetKey(key);
-        return false;
-      }
-      else
-      {
-        return true;
+        logger.LogCritical(ex, "Error handling market order");
       }
     }
 
-    private static void SetKey(string key)
+    private static void HandleMapData(object sender, MsgHandlerEventArgs args)
     {
-      RedisCache.StringSet(key, 1, TimeSpan.FromSeconds(600));
+      var logger = CreateLogger<Program>();
+      var message = args.Message;
+      try
+      {
+        using (var md5 = MD5.Create())
+        {
+          logger.LogInformation("Processing Map Data");
+          var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
+          var key = $"{message.Subject}-{hash}";
+          if (!IsDupedMessage(logger, key))
+          {
+            NatsConnection.Publish("mapdata.dedupedtest", message.Data);
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogCritical(ex, "Error handling map data");
+      }
+    }
+
+    private static void HandleGoldData(object sender, MsgHandlerEventArgs args)
+    {
+      var logger = CreateLogger<Program>();
+      var message = args.Message;
+      try
+      {
+        using (var md5 = MD5.Create())
+        {
+          logger.LogInformation("Processing Gold Data");
+          var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
+          var key = $"{message.Subject}-{hash}";
+          if (!IsDupedMessage(logger, key))
+          {
+            NatsConnection.Publish("goldprices.dedupedtest", message.Data);
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogCritical(ex, "Error handling gold data");
+      }
+    }
+
+    private static bool IsDupedMessage(ILogger logger, string key)
+    {
+      try
+      {
+        var value = RedisCache.StringGet(key);
+        if (value.IsNullOrEmpty)
+        {
+          // No value means we have not seen it before
+          SetKey(logger, key);
+          return false;
+        }
+        else
+        {
+          return true;
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogCritical(ex, "Error checking redis cache");
+      }
+      return true;
+    }
+
+    private static void SetKey(ILogger logger, string key)
+    {
+      try
+      {
+        RedisCache.StringSet(key, 1, TimeSpan.FromSeconds(600));
+      }
+      catch (Exception ex)
+      {
+        logger.LogCritical(ex, "Error setting redis cache");
+      }
     }
   }
 }
