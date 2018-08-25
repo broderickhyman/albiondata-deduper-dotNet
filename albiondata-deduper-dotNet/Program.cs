@@ -21,9 +21,12 @@ namespace albiondata_deduper_dotNet
     public static string RedisPassword { get; } = "";
 
     [Option(Description = "NATS Url", ShortName = "n", ShowInHelpText = true)]
-    public static string NatsUrl { get; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";// = "nats://localhost:4222";
+    public static string NatsUrl { get; } = "nats://public:thenewalbiondata@localhost:4222";
 
-    public static ILoggerFactory LoggerFactory { get; } = new LoggerFactory().AddConsole();
+    [Option(Description = "Enable Debug Logging", ShortName = "d", LongName = "debug", ShowInHelpText = true)]
+    public static bool Debug { get; }
+
+    public static ILoggerFactory LoggerFactory { get; } = new LoggerFactory().AddConsole(Debug ? LogLevel.Debug : LogLevel.Information);
     public static ILogger CreateLogger<T>() => LoggerFactory.CreateLogger<T>();
 
     private static ManualResetEvent quitEvent = new ManualResetEvent(false);
@@ -113,7 +116,7 @@ namespace albiondata_deduper_dotNet
         var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
         using (var md5 = MD5.Create())
         {
-          logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders");
+          logger.LogDebug($"Processing {marketUpload.Orders.Count} Market Orders");
           foreach (var order in marketUpload.Orders)
           {
             var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
@@ -127,7 +130,7 @@ namespace albiondata_deduper_dotNet
       }
       catch (Exception ex)
       {
-        logger.LogCritical(ex, "Error handling market order");
+        logger.LogError(ex, "Error handling market order");
       }
     }
 
@@ -150,7 +153,7 @@ namespace albiondata_deduper_dotNet
       }
       catch (Exception ex)
       {
-        logger.LogCritical(ex, "Error handling map data");
+        logger.LogError(ex, "Error handling map data");
       }
     }
 
@@ -173,7 +176,7 @@ namespace albiondata_deduper_dotNet
       }
       catch (Exception ex)
       {
-        logger.LogCritical(ex, "Error handling gold data");
+        logger.LogError(ex, "Error handling gold data");
       }
     }
 
@@ -195,7 +198,7 @@ namespace albiondata_deduper_dotNet
       }
       catch (Exception ex)
       {
-        logger.LogCritical(ex, "Error checking redis cache");
+        logger.LogError(ex, "Error checking redis cache");
       }
       return true;
     }
@@ -208,7 +211,7 @@ namespace albiondata_deduper_dotNet
       }
       catch (Exception ex)
       {
-        logger.LogCritical(ex, "Error setting redis cache");
+        logger.LogError(ex, "Error setting redis cache");
       }
     }
   }

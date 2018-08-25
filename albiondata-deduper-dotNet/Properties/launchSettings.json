@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "albiondata-deduper-dotNet": {
+      "commandName": "Project",
+      "commandLineArgs": "-n \"nats://public:thenewalbiondata@albion-online-data.com:4222\""
+    }
+  }
+}
