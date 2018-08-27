@@ -21,7 +21,7 @@ namespace albiondata_deduper_dotNet
     public static string RedisPassword { get; } = "";
 
     [Option(Description = "NATS Url", ShortName = "n", ShowInHelpText = true)]
-    public static string NatsUrl { get; } = "nats://public:thenewalbiondata@localhost:4222";
+    public static string NatsUrl { get; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";
 
     [Option(Description = "Enable Debug Logging", ShortName = "d", LongName = "debug", ShowInHelpText = true)]
     public static bool Debug { get; }
@@ -84,7 +84,8 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation(RedisAddress);
       logger.LogInformation(NatsUrl);
 
-      logger.LogInformation($"Debugging: {Debug}");
+      if (Debug)
+        logger.LogInformation("Debugging enabled");
 
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
