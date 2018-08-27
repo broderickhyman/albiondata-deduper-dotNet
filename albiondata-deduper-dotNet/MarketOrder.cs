@@ -6,9 +6,6 @@ namespace albiondata_deduper_dotNet
 {
   internal class MarketOrder
   {
-    public static string MarketOrdersIngest = "marketorders.ingest";
-    public static string MarketOrdersDeduped = "marketorders.dedupedtest";
-
     public long Id;
     public string ItemTypeId;
     public string ItemGroupTypeId;

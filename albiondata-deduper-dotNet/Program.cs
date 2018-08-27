@@ -72,6 +72,13 @@ namespace albiondata_deduper_dotNet
       }
     }
 
+    private const string marketOrdersIngest = "marketorders.ingest";
+    private const string mapDataIngest = "mapdata.ingest";
+    private const string goldDataIngest = "goldprices.ingest";
+    private const string marketOrdersDeduped = "marketorders.dedupedtest";
+    private const string mapDataDeduped = "mapdata.dedupedtest";
+    private const string goldDataDeduped = "goldprices.dedupedtest";
+
     private void OnExecute()
     {
       Console.CancelKeyPress += (sender, args) =>
@@ -90,9 +97,9 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
       logger.LogInformation($"NATS Connected, ID: {NatsConnection.ConnectedId}");
-      var incomingMarketOrders = NatsConnection.SubscribeAsync(MarketOrder.MarketOrdersIngest);
-      var incomingMapData = NatsConnection.SubscribeAsync("mapdata.ingest");
-      var incomingGoldData = NatsConnection.SubscribeAsync("goldprices.ingest");
+      var incomingMarketOrders = NatsConnection.SubscribeAsync(marketOrdersIngest);
+      var incomingMapData = NatsConnection.SubscribeAsync(mapDataIngest);
+      var incomingGoldData = NatsConnection.SubscribeAsync(goldDataIngest);
 
       incomingMarketOrders.MessageHandler += HandleMarketOrder;
       incomingMapData.MessageHandler += HandleMapData;
@@ -126,7 +133,7 @@ namespace albiondata_deduper_dotNet
             var key = $"{message.Subject}-{hash}";
             if (!IsDupedMessage(logger, key))
             {
-              NatsConnection.Publish(MarketOrder.MarketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+              NatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
             }
           }
         }
@@ -150,7 +157,7 @@ namespace albiondata_deduper_dotNet
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
-            NatsConnection.Publish("mapdata.dedupedtest", message.Data);
+            NatsConnection.Publish(mapDataDeduped, message.Data);
           }
         }
       }
@@ -173,7 +180,7 @@ namespace albiondata_deduper_dotNet
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
-            NatsConnection.Publish("goldprices.dedupedtest", message.Data);
+            NatsConnection.Publish(goldDataDeduped, message.Data);
           }
         }
       }
