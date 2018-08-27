@@ -84,6 +84,8 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation(RedisAddress);
       logger.LogInformation(NatsUrl);
 
+      logger.LogInformation($"Debugging: {Debug}");
+
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
       logger.LogInformation($"NATS Connected, ID: {NatsConnection.ConnectedId}");
@@ -116,7 +118,7 @@ namespace albiondata_deduper_dotNet
         var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
         using (var md5 = MD5.Create())
         {
-          logger.LogDebug($"Processing {marketUpload.Orders.Count} Market Orders");
+          logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders");
           foreach (var order in marketUpload.Orders)
           {
             var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
