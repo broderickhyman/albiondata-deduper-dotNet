@@ -3,7 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28010.2003
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "albiondata-deduper-dotNet", "albiondata-deduper-dotNet\albiondata-deduper-dotNet.csproj", "{4775C737-42E0-460D-AEC1-03EDD3E3542F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "albiondata-deduper-dotNet", "albiondata-deduper-dotNet\albiondata-deduper-dotNet.csproj", "{4775C737-42E0-460D-AEC1-03EDD3E3542F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{BE6A37A1-02B3-4E2B-A1FF-87BAA7BF3968}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+		Dockerfile = Dockerfile
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
