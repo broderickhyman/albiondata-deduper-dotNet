@@ -20,8 +20,11 @@ namespace albiondata_deduper_dotNet
     [Option(Description = "Redis Password", ShortName = "p", ShowInHelpText = true)]
     public static string RedisPassword { get; } = "";
 
-    [Option(Description = "NATS Url", ShortName = "n", ShowInHelpText = true)]
-    public static string NatsUrl { get; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";
+    [Option(Description = "Incoming NATS Url", ShortName = "n", ShowInHelpText = true)]
+    public static string IncomingNatsUrl { get; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";
+
+    [Option(Description = "Outgoing NATS Url", ShortName = "o", ShowInHelpText = true)]
+    public static string OutgoingNatsUrl { get; } = "nats://public:thenewalbiondata@localhost:4222";
 
     [Option(Description = "Enable Debug Logging", ShortName = "d", LongName = "debug", ShowInHelpText = true)]
     public static bool Debug { get; }
@@ -29,8 +32,9 @@ namespace albiondata_deduper_dotNet
     public static ILoggerFactory LoggerFactory { get; } = new LoggerFactory().AddConsole(Debug ? LogLevel.Debug : LogLevel.Information);
     public static ILogger CreateLogger<T>() => LoggerFactory.CreateLogger<T>();
 
-    private static ManualResetEvent quitEvent = new ManualResetEvent(false);
+    private static readonly ManualResetEvent quitEvent = new ManualResetEvent(false);
 
+    #region Connections
     private static readonly Lazy<ConnectionMultiplexer> lazyRedis = new Lazy<ConnectionMultiplexer>(() =>
     {
       var config = new ConfigurationOptions();
@@ -58,26 +62,42 @@ namespace albiondata_deduper_dotNet
       }
     }
 
-    private static readonly Lazy<IConnection> lazyNats = new Lazy<IConnection>(() =>
+    private static readonly Lazy<IConnection> lazyIncomingNats = new Lazy<IConnection>(() =>
     {
       var natsFactory = new ConnectionFactory();
-      return natsFactory.CreateConnection(NatsUrl);
+      return natsFactory.CreateConnection(IncomingNatsUrl);
     });
 
-    public static IConnection NatsConnection
+    public static IConnection IncomingNatsConnection
     {
       get
       {
-        return lazyNats.Value;
+        return lazyIncomingNats.Value;
       }
     }
 
+    private static readonly Lazy<IConnection> lazyOutgoingNats = new Lazy<IConnection>(() =>
+    {
+      var natsFactory = new ConnectionFactory();
+      return natsFactory.CreateConnection(OutgoingNatsUrl);
+    });
+
+    public static IConnection OutgoingNatsConnection
+    {
+      get
+      {
+        return lazyOutgoingNats.Value;
+      }
+    }
+    #endregion
+    #region Subjects
     private const string marketOrdersIngest = "marketorders.ingest";
     private const string mapDataIngest = "mapdata.ingest";
     private const string goldDataIngest = "goldprices.ingest";
-    private const string marketOrdersDeduped = "marketorders.dedupedtest";
-    private const string mapDataDeduped = "mapdata.dedupedtest";
-    private const string goldDataDeduped = "goldprices.dedupedtest";
+    private const string marketOrdersDeduped = "marketorders.deduped";
+    private const string mapDataDeduped = "mapdata.deduped";
+    private const string goldDataDeduped = "goldprices.deduped";
+    #endregion
 
     private void OnExecute()
     {
@@ -88,18 +108,20 @@ namespace albiondata_deduper_dotNet
       };
 
       var logger = CreateLogger<Program>();
-      logger.LogInformation(RedisAddress);
-      logger.LogInformation(NatsUrl);
+      logger.LogInformation($"Redis URL: {RedisAddress}");
+      logger.LogInformation($"Incoming Nats URL: {IncomingNatsUrl}");
+      logger.LogInformation($"Outgoing Nats URL: {OutgoingNatsUrl}");
 
       if (Debug)
         logger.LogInformation("Debugging enabled");
 
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
-      logger.LogInformation($"NATS Connected, ID: {NatsConnection.ConnectedId}");
-      var incomingMarketOrders = NatsConnection.SubscribeAsync(marketOrdersIngest);
-      var incomingMapData = NatsConnection.SubscribeAsync(mapDataIngest);
-      var incomingGoldData = NatsConnection.SubscribeAsync(goldDataIngest);
+      logger.LogInformation($"Incoming NATS Connected, ID: {IncomingNatsConnection.ConnectedId}");
+      logger.LogInformation($"Outgoing NATS Connected, ID: {OutgoingNatsConnection.ConnectedId}");
+      var incomingMarketOrders = IncomingNatsConnection.SubscribeAsync(marketOrdersIngest);
+      var incomingMapData = IncomingNatsConnection.SubscribeAsync(mapDataIngest);
+      var incomingGoldData = IncomingNatsConnection.SubscribeAsync(goldDataIngest);
 
       incomingMarketOrders.MessageHandler += HandleMarketOrder;
       incomingMapData.MessageHandler += HandleMapData;
@@ -113,7 +135,7 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation("Listening for Gold Data");
 
       quitEvent.WaitOne();
-      NatsConnection.Close();
+      IncomingNatsConnection.Close();
       RedisConnection.Dispose();
     }
 
@@ -133,7 +155,7 @@ namespace albiondata_deduper_dotNet
             var key = $"{message.Subject}-{hash}";
             if (!IsDupedMessage(logger, key))
             {
-              NatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+              OutgoingNatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
             }
           }
         }
@@ -157,7 +179,7 @@ namespace albiondata_deduper_dotNet
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
-            NatsConnection.Publish(mapDataDeduped, message.Data);
+            OutgoingNatsConnection.Publish(mapDataDeduped, message.Data);
           }
         }
       }
@@ -180,7 +202,7 @@ namespace albiondata_deduper_dotNet
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
-            NatsConnection.Publish(goldDataDeduped, message.Data);
+            OutgoingNatsConnection.Publish(goldDataDeduped, message.Data);
           }
         }
       }
