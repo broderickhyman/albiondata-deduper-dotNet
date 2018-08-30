@@ -136,6 +136,7 @@ namespace albiondata_deduper_dotNet
 
       quitEvent.WaitOne();
       IncomingNatsConnection.Close();
+      OutgoingNatsConnection.Close();
       RedisConnection.Dispose();
     }
 
