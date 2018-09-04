@@ -1,4 +1,5 @@
-﻿using McMaster.Extensions.CommandLineUtils;
+﻿using AlbionData.Models;
+using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using NATS.Client;
 using Newtonsoft.Json;
