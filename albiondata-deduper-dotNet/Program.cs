@@ -233,8 +233,8 @@ namespace albiondata_deduper_dotNet
       catch (Exception ex)
       {
         logger.LogError(ex, "Error checking redis cache");
+        return false;
       }
-      return true;
     }
 
     private static void SetKey(ILogger logger, string key)
