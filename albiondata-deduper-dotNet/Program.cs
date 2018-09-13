@@ -153,6 +153,8 @@ namespace albiondata_deduper_dotNet
           logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders - {DateTime.Now.ToLongTimeString()}");
           foreach (var order in marketUpload.Orders)
           {
+            // Hack since albion seems to be multiplying every price by 10000?
+            order.UnitPriceSilver /= 10000;
             var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
             var key = $"{message.Subject}-{hash}";
             if (!IsDupedMessage(logger, key))
