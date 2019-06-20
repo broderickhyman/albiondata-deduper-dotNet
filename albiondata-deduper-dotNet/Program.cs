@@ -155,6 +155,11 @@ namespace albiondata_deduper_dotNet
           {
             // Hack since albion seems to be multiplying every price by 10000?
             order.UnitPriceSilver /= 10000;
+            // Make sure all caerleon markets are registered with the same ID since they have the same contents
+            if (order.LocationId == (ushort)Location.Caerleon2)
+            {
+              order.LocationId = (ushort)Location.Caerleon;
+            }
             var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
             var key = $"{message.Subject}-{hash}";
             if (!IsDupedMessage(logger, key))
