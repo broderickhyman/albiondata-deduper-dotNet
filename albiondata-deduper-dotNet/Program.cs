@@ -93,9 +93,11 @@ namespace albiondata_deduper_dotNet
     #endregion
     #region Subjects
     private const string marketOrdersIngest = "marketorders.ingest";
+    private const string marketHistoriesIngest = "markethistories.ingest";
     private const string mapDataIngest = "mapdata.ingest";
     private const string goldDataIngest = "goldprices.ingest";
     private const string marketOrdersDeduped = "marketorders.deduped";
+    private const string marketHistoriesDeduped = "markethistories.deduped";
     private const string mapDataDeduped = "mapdata.deduped";
     private const string goldDataDeduped = "goldprices.deduped";
     #endregion
@@ -121,15 +123,19 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation($"Incoming NATS Connected, ID: {IncomingNatsConnection.ConnectedId}");
       logger.LogInformation($"Outgoing NATS Connected, ID: {OutgoingNatsConnection.ConnectedId}");
       var incomingMarketOrders = IncomingNatsConnection.SubscribeAsync(marketOrdersIngest);
+      var incomingHistories = IncomingNatsConnection.SubscribeAsync(marketHistoriesIngest);
       var incomingMapData = IncomingNatsConnection.SubscribeAsync(mapDataIngest);
       var incomingGoldData = IncomingNatsConnection.SubscribeAsync(goldDataIngest);
 
       incomingMarketOrders.MessageHandler += HandleMarketOrder;
+      incomingHistories.MessageHandler += HandleHistory;
       incomingMapData.MessageHandler += HandleMapData;
       incomingGoldData.MessageHandler += HandleGoldData;
 
       incomingMarketOrders.Start();
       logger.LogInformation("Listening for Market Order Data");
+      incomingHistories.Start();
+      logger.LogInformation("Listening for Market History Data");
       incomingMapData.Start();
       logger.LogInformation("Listening for Map Data");
       incomingGoldData.Start();
@@ -160,7 +166,7 @@ namespace albiondata_deduper_dotNet
             {
               order.LocationId = (ushort)Location.Caerleon;
             }
-            var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.ToString())));
+            var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.GetUniqueKey())));
             var key = $"{message.Subject}-{hash}";
             if (!IsDupedMessage(logger, key))
             {
@@ -172,6 +178,40 @@ namespace albiondata_deduper_dotNet
       catch (Exception ex)
       {
         logger.LogError(ex, "Error handling market order");
+      }
+    }
+
+    private static void HandleHistory(object sender, MsgHandlerEventArgs args)
+    {
+      var logger = CreateLogger<Program>();
+      var message = args.Message;
+      try
+      {
+        var marketHistoriesUpload = JsonConvert.DeserializeObject<MarketHistoriesUpload>(Encoding.UTF8.GetString(message.Data));
+        using (var md5 = MD5.Create())
+        {
+          logger.LogInformation($"Processing {marketHistoriesUpload.MarketHistories.Count} Market Histories - {DateTime.Now.ToLongTimeString()}");
+          foreach (var marketHistory in marketHistoriesUpload.MarketHistories)
+          {
+            // Hack since albion seems to be multiplying every price by 10000?
+            marketHistory.SilverAmount /= 10000;
+          }
+          // Make sure all caerleon markets are registered with the same ID since they have the same contents
+          if (marketHistoriesUpload.LocationId == (ushort)Location.Caerleon2)
+          {
+            marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
+          }
+          var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload))));
+          var key = $"{message.Subject}-{hash}";
+          if (!IsDupedMessage(logger, key))
+          {
+            OutgoingNatsConnection.Publish(marketHistoriesDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload)));
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.LogError(ex, "Error handling market history");
       }
     }
 
