@@ -165,7 +165,7 @@ namespace albiondata_deduper_dotNet
             order.LocationId = (ushort)Location.Caerleon;
           }
           // Make the hash unique while also including anything that could change
-          var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}";
+          var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("S")}";
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
