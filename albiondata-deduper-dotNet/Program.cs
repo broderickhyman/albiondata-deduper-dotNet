@@ -1,13 +1,13 @@
-﻿using AlbionData.Models;
+﻿using System;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using AlbionData.Models;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using NATS.Client;
 using Newtonsoft.Json;
 using StackExchange.Redis;
-using System;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
 
 namespace albiondata_deduper_dotNet
 {
@@ -154,24 +154,22 @@ namespace albiondata_deduper_dotNet
       try
       {
         var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
-        using (var md5 = MD5.Create())
+        logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders - {DateTime.Now.ToLongTimeString()}");
+        foreach (var order in marketUpload.Orders)
         {
-          logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders - {DateTime.Now.ToLongTimeString()}");
-          foreach (var order in marketUpload.Orders)
+          // Hack since albion seems to be multiplying every price by 10000?
+          order.UnitPriceSilver /= 10000;
+          // Make sure all caerleon markets are registered with the same ID since they have the same contents
+          if (order.LocationId == (ushort)Location.Caerleon2)
           {
-            // Hack since albion seems to be multiplying every price by 10000?
-            order.UnitPriceSilver /= 10000;
-            // Make sure all caerleon markets are registered with the same ID since they have the same contents
-            if (order.LocationId == (ushort)Location.Caerleon2)
-            {
-              order.LocationId = (ushort)Location.Caerleon;
-            }
-            var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(order.GetUniqueKey())));
-            var key = $"{message.Subject}-{hash}";
-            if (!IsDupedMessage(logger, key))
-            {
-              OutgoingNatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
-            }
+            order.LocationId = (ushort)Location.Caerleon;
+          }
+          // Make the hash unique while also including anything that could change
+          var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}";
+          var key = $"{message.Subject}-{hash}";
+          if (!IsDupedMessage(logger, key))
+          {
+            OutgoingNatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
           }
         }
       }
@@ -261,6 +259,11 @@ namespace albiondata_deduper_dotNet
       }
     }
 
+    /// <summary>
+    /// Check if a message has been seen recently, otherwise set the redis key
+    /// </summary>
+    /// <param name="logger"></param>
+    /// <param name="key"></param>
     private static bool IsDupedMessage(ILogger logger, string key)
     {
       try
@@ -269,6 +272,7 @@ namespace albiondata_deduper_dotNet
         if (value.IsNullOrEmpty)
         {
           // No value means we have not seen it before
+          // Only set the key when new so that messages will be sent every X minutes so the item can be marked as still available
           SetKey(logger, key);
           return false;
         }
