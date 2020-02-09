@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -30,10 +33,12 @@ namespace albiondata_deduper_dotNet
     [Option(Description = "Enable Debug Logging", ShortName = "d", LongName = "debug", ShowInHelpText = true)]
     public static bool Debug { get; set; }
 
-    public static ILoggerFactory Logger { get; } = LoggerFactory.Create(builder => builder.AddConsole());
+    public static ILoggerFactory Logger { get; } = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(Debug ? LogLevel.Debug : LogLevel.Information));
     public static ILogger CreateLogger<T>() => Logger.CreateLogger<T>();
 
     private static readonly ManualResetEvent quitEvent = new ManualResetEvent(false);
+
+    private static readonly Dictionary<int, string> itemIdMapping = new Dictionary<int, string>();
 
     #region Connections
     private static readonly Lazy<ConnectionMultiplexer> lazyRedis = new Lazy<ConnectionMultiplexer>(() =>
@@ -116,9 +121,17 @@ namespace albiondata_deduper_dotNet
       logger.LogInformation($"Outgoing Nats URL: {OutgoingNatsUrl}");
 
       if (Debug)
+      {
         logger.LogInformation("Debugging enabled");
+      }
 
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
+
+      foreach (var line in File.ReadLines("items.txt"))
+      {
+        var split = line.Split(':').Select(x => x.Trim());
+        itemIdMapping.Add(int.Parse(split.First()), split.Skip(1).First());
+      }
 
       logger.LogInformation($"Incoming NATS Connected, ID: {IncomingNatsConnection.ConnectedId}");
       logger.LogInformation($"Outgoing NATS Connected, ID: {OutgoingNatsConnection.ConnectedId}");
@@ -186,6 +199,10 @@ namespace albiondata_deduper_dotNet
       try
       {
         var marketHistoriesUpload = JsonConvert.DeserializeObject<MarketHistoriesUpload>(Encoding.UTF8.GetString(message.Data));
+
+        // Sort history by descending time so the newest is always first in the list
+        marketHistoriesUpload.MarketHistories.Sort((a, b) => a.Timestamp.CompareTo(b.Timestamp) * -1);
+
         using var md5 = MD5.Create();
         logger.LogInformation($"Processing {marketHistoriesUpload.MarketHistories.Count} Market Histories - {DateTime.Now.ToLongTimeString()}");
         foreach (var marketHistory in marketHistoriesUpload.MarketHistories)
@@ -193,16 +210,30 @@ namespace albiondata_deduper_dotNet
           // Hack since albion seems to be multiplying every price by 10000?
           marketHistory.SilverAmount /= 10000;
         }
+
         // Make sure all caerleon markets are registered with the same ID since they have the same contents
         if (marketHistoriesUpload.LocationId == (ushort)Location.Caerleon2)
         {
           marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
         }
-        var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload))));
+
+        // Lookup the unique name based on the numeric ID
+        itemIdMapping.TryGetValue((int)marketHistoriesUpload.AlbionId, out marketHistoriesUpload.AlbionIdString);
+
+        var newUploadStringBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload));
+
+        var hash = Encoding.UTF8.GetString(md5.ComputeHash(newUploadStringBytes));
         var key = $"{message.Subject}-{hash}";
-        if (!IsDupedMessage(logger, key))
+
+        var expire = TimeSpan.FromHours(6);
+        if (marketHistoriesUpload.Timescale == Timescale.Day)
         {
-          OutgoingNatsConnection.Publish(marketHistoriesDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload)));
+          expire = TimeSpan.FromHours(1);
+        }
+
+        if (!IsDupedMessage(logger, key, expire))
+        {
+          OutgoingNatsConnection.Publish(marketHistoriesDeduped, newUploadStringBytes);
         }
       }
       catch (Exception ex)
@@ -258,7 +289,7 @@ namespace albiondata_deduper_dotNet
     /// </summary>
     /// <param name="logger"></param>
     /// <param name="key"></param>
-    private static bool IsDupedMessage(ILogger logger, string key)
+    private static bool IsDupedMessage(ILogger logger, string key, TimeSpan expire = default)
     {
       try
       {
@@ -267,7 +298,7 @@ namespace albiondata_deduper_dotNet
         {
           // No value means we have not seen it before
           // Only set the key when new so that messages will be sent every X minutes so the item can be marked as still available
-          SetKey(logger, key);
+          SetKey(logger, key, expire);
           return false;
         }
         else
@@ -282,11 +313,15 @@ namespace albiondata_deduper_dotNet
       }
     }
 
-    private static void SetKey(ILogger logger, string key)
+    private static void SetKey(ILogger logger, string key, TimeSpan expire = default)
     {
       try
       {
-        RedisCache.StringSet(key, 1, TimeSpan.FromSeconds(600));
+        if (expire == default)
+        {
+          expire = TimeSpan.FromSeconds(600);
+        }
+        RedisCache.StringSet(key, 1, expire);
       }
       catch (Exception ex)
       {
