@@ -16,22 +16,22 @@ namespace albiondata_deduper_dotNet
     private static void Main(string[] args) => CommandLineApplication.Execute<Program>(args);
 
     [Option(Description = "Redis URL", ShortName = "r", ShowInHelpText = true)]
-    public static string RedisAddress { get; } = "localhost:6379";
+    public static string RedisAddress { get; set; } = "localhost:6379";
 
     [Option(Description = "Redis Password", ShortName = "p", ShowInHelpText = true)]
-    public static string RedisPassword { get; } = "";
+    public static string RedisPassword { get; set; } = "";
 
     [Option(Description = "Incoming NATS Url", ShortName = "n", ShowInHelpText = true)]
-    public static string IncomingNatsUrl { get; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";
+    public static string IncomingNatsUrl { get; set; } = "nats://public:thenewalbiondata@albion-online-data.com:4222";
 
     [Option(Description = "Outgoing NATS Url", ShortName = "o", ShowInHelpText = true)]
-    public static string OutgoingNatsUrl { get; } = "nats://public:thenewalbiondata@localhost:4222";
+    public static string OutgoingNatsUrl { get; set; } = "nats://public:thenewalbiondata@localhost:4222";
 
     [Option(Description = "Enable Debug Logging", ShortName = "d", LongName = "debug", ShowInHelpText = true)]
-    public static bool Debug { get; }
+    public static bool Debug { get; set; }
 
-    public static ILoggerFactory LoggerFactory { get; } = new LoggerFactory().AddConsole(Debug ? LogLevel.Debug : LogLevel.Information);
-    public static ILogger CreateLogger<T>() => LoggerFactory.CreateLogger<T>();
+    public static ILoggerFactory Logger { get; } = LoggerFactory.Create(builder => builder.AddConsole());
+    public static ILogger CreateLogger<T>() => Logger.CreateLogger<T>();
 
     private static readonly ManualResetEvent quitEvent = new ManualResetEvent(false);
 
@@ -165,7 +165,7 @@ namespace albiondata_deduper_dotNet
             order.LocationId = (ushort)Location.Caerleon;
           }
           // Make the hash unique while also including anything that could change
-          var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("S")}";
+          var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("s")}";
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
@@ -186,25 +186,23 @@ namespace albiondata_deduper_dotNet
       try
       {
         var marketHistoriesUpload = JsonConvert.DeserializeObject<MarketHistoriesUpload>(Encoding.UTF8.GetString(message.Data));
-        using (var md5 = MD5.Create())
+        using var md5 = MD5.Create();
+        logger.LogInformation($"Processing {marketHistoriesUpload.MarketHistories.Count} Market Histories - {DateTime.Now.ToLongTimeString()}");
+        foreach (var marketHistory in marketHistoriesUpload.MarketHistories)
         {
-          logger.LogInformation($"Processing {marketHistoriesUpload.MarketHistories.Count} Market Histories - {DateTime.Now.ToLongTimeString()}");
-          foreach (var marketHistory in marketHistoriesUpload.MarketHistories)
-          {
-            // Hack since albion seems to be multiplying every price by 10000?
-            marketHistory.SilverAmount /= 10000;
-          }
-          // Make sure all caerleon markets are registered with the same ID since they have the same contents
-          if (marketHistoriesUpload.LocationId == (ushort)Location.Caerleon2)
-          {
-            marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
-          }
-          var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload))));
-          var key = $"{message.Subject}-{hash}";
-          if (!IsDupedMessage(logger, key))
-          {
-            OutgoingNatsConnection.Publish(marketHistoriesDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload)));
-          }
+          // Hack since albion seems to be multiplying every price by 10000?
+          marketHistory.SilverAmount /= 10000;
+        }
+        // Make sure all caerleon markets are registered with the same ID since they have the same contents
+        if (marketHistoriesUpload.LocationId == (ushort)Location.Caerleon2)
+        {
+          marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
+        }
+        var hash = Encoding.UTF8.GetString(md5.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload))));
+        var key = $"{message.Subject}-{hash}";
+        if (!IsDupedMessage(logger, key))
+        {
+          OutgoingNatsConnection.Publish(marketHistoriesDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(marketHistoriesUpload)));
         }
       }
       catch (Exception ex)
@@ -219,15 +217,13 @@ namespace albiondata_deduper_dotNet
       var message = args.Message;
       try
       {
-        using (var md5 = MD5.Create())
+        using var md5 = MD5.Create();
+        logger.LogInformation("Processing Map Data");
+        var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
+        var key = $"{message.Subject}-{hash}";
+        if (!IsDupedMessage(logger, key))
         {
-          logger.LogInformation("Processing Map Data");
-          var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
-          var key = $"{message.Subject}-{hash}";
-          if (!IsDupedMessage(logger, key))
-          {
-            OutgoingNatsConnection.Publish(mapDataDeduped, message.Data);
-          }
+          OutgoingNatsConnection.Publish(mapDataDeduped, message.Data);
         }
       }
       catch (Exception ex)
@@ -242,15 +238,13 @@ namespace albiondata_deduper_dotNet
       var message = args.Message;
       try
       {
-        using (var md5 = MD5.Create())
+        using var md5 = MD5.Create();
+        logger.LogInformation("Processing Gold Data");
+        var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
+        var key = $"{message.Subject}-{hash}";
+        if (!IsDupedMessage(logger, key))
         {
-          logger.LogInformation("Processing Gold Data");
-          var hash = Encoding.UTF8.GetString(md5.ComputeHash(message.Data));
-          var key = $"{message.Subject}-{hash}";
-          if (!IsDupedMessage(logger, key))
-          {
-            OutgoingNatsConnection.Publish(goldDataDeduped, message.Data);
-          }
+          OutgoingNatsConnection.Publish(goldDataDeduped, message.Data);
         }
       }
       catch (Exception ex)
