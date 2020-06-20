@@ -1,16 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
-using AlbionData.Models;
+﻿using AlbionData.Models;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using NATS.Client;
 using Newtonsoft.Json;
 using StackExchange.Redis;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 
 namespace albiondata_deduper_dotNet
 {
@@ -127,10 +128,14 @@ namespace albiondata_deduper_dotNet
 
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
-      foreach (var line in File.ReadLines("items.txt"))
+      var itemIdFile = new HttpClient().GetStringAsync("https://raw.githubusercontent.com/broderickhyman/ao-bin-dumps/master/formatted/items.txt").Result;
+      foreach (var line in itemIdFile.Split("\n", StringSplitOptions.RemoveEmptyEntries))
       {
         var split = line.Split(':').Select(x => x.Trim());
-        itemIdMapping.Add(int.Parse(split.First()), split.Skip(1).First());
+        if (split.Any())
+        {
+          itemIdMapping.Add(int.Parse(split.First()), split.Skip(1).First());
+        }
       }
 
       logger.LogInformation($"Incoming NATS Connected, ID: {IncomingNatsConnection.ConnectedId}");
