@@ -103,6 +103,7 @@ namespace albiondata_deduper_dotNet
     private const string mapDataIngest = "mapdata.ingest";
     private const string goldDataIngest = "goldprices.ingest";
     private const string marketOrdersDeduped = "marketorders.deduped";
+    private const string marketOrdersDedupedBulk = "marketorders.deduped.bulk";
     private const string marketHistoriesDeduped = "markethistories.deduped";
     private const string mapDataDeduped = "mapdata.deduped";
     private const string goldDataDeduped = "goldprices.deduped";
@@ -196,7 +197,7 @@ namespace albiondata_deduper_dotNet
         if (orderArray.Count > 0)
         {
           logger.LogInformation($"Found {orderArray.Count} New Market Orders - {DateTime.Now.ToLongTimeString()}");
-          OutgoingNatsConnection.Publish("marketorders.deduped.bulk", Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(orderArray)));
+          OutgoingNatsConnection.Publish(marketOrdersDedupedBulk, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(orderArray)));
         }
       }
       catch (Exception ex)
