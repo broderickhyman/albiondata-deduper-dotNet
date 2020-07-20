@@ -172,6 +172,7 @@ namespace albiondata_deduper_dotNet
       try
       {
         var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
+        List<MarketOrder> orderArray = new List<MarketOrder>();
         logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders - {DateTime.Now.ToLongTimeString()}");
         foreach (var order in marketUpload.Orders)
         {
@@ -188,7 +189,14 @@ namespace albiondata_deduper_dotNet
           if (!IsDupedMessage(logger, key))
           {
             OutgoingNatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+            orderArray.Add(order);
           }
+        }
+
+        if (orderArray.Count > 0)
+        {
+          logger.LogInformation($"Found {orderArray.Count} New Market Orders - {DateTime.Now.ToLongTimeString()}");
+          OutgoingNatsConnection.Publish("marketorders.deduped.bulk", Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(orderArray)));
         }
       }
       catch (Exception ex)
