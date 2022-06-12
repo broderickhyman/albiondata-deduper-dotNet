@@ -184,6 +184,26 @@ namespace albiondata_deduper_dotNet
           {
             order.LocationId = (ushort)Location.Caerleon;
           }
+          // Into the Fray Portal Towns
+          // Make sure all portal markets are registered with the same ID as their corresponding city as they have the same contents
+	  switch(order.LocationId)
+	  {
+	  case (ushort)Location.ThetfordPortal:
+	       order.LocationId = (ushort)Location.Thetford;
+	       break;
+	  case (ushort)Location.LymhurstPortal:
+	       order.LocationId = (ushort)Location.Lymhurst;
+	       break;
+	  case (ushort)Location.BridgewatchPortal:
+	       order.LocationId = (ushort)Location.Bridgewatch;
+	       break;
+	  case (ushort)Location.MartlockPortal:
+	       order.LocationId = (ushort)Location.Martlock;
+	       break;
+	  case (ushort)Location.FortSterlingPortal:
+	       order.LocationId = (ushort)Location.FortSterling;
+	       break;
+	  }
           // Make the hash unique while also including anything that could change
           var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("s")}";
           var key = $"{message.Subject}-{hash}";
