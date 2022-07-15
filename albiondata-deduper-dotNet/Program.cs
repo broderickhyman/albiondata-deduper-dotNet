@@ -103,6 +103,7 @@ namespace albiondata_deduper_dotNet
     private const string mapDataIngest = "mapdata.ingest";
     private const string goldDataIngest = "goldprices.ingest";
     private const string marketOrdersDeduped = "marketorders.deduped";
+    private const string marketOrdersDedupedBulk = "marketorders.deduped.bulk";
     private const string marketHistoriesDeduped = "markethistories.deduped";
     private const string mapDataDeduped = "mapdata.deduped";
     private const string goldDataDeduped = "goldprices.deduped";
@@ -172,6 +173,7 @@ namespace albiondata_deduper_dotNet
       try
       {
         var marketUpload = JsonConvert.DeserializeObject<MarketUpload>(Encoding.UTF8.GetString(message.Data));
+        List<MarketOrder> orderArray = new List<MarketOrder>();
         logger.LogInformation($"Processing {marketUpload.Orders.Count} Market Orders - {DateTime.Now.ToLongTimeString()}");
         foreach (var order in marketUpload.Orders)
         {
@@ -182,13 +184,40 @@ namespace albiondata_deduper_dotNet
           {
             order.LocationId = (ushort)Location.Caerleon;
           }
+          // Into the Fray Portal Towns
+          // Make sure all portal markets are registered with the same ID as their corresponding city as they have the same contents
+	  switch(order.LocationId)
+          {
+          case (ushort)Location.ThetfordPortal:
+               order.LocationId = (ushort)Location.Thetford;
+               break;
+          case (ushort)Location.LymhurstPortal:
+               order.LocationId = (ushort)Location.Lymhurst;
+               break;
+          case (ushort)Location.BridgewatchPortal:
+               order.LocationId = (ushort)Location.Bridgewatch;
+               break;
+          case (ushort)Location.MartlockPortal:
+               order.LocationId = (ushort)Location.Martlock;
+               break;
+          case (ushort)Location.FortSterlingPortal:
+               order.LocationId = (ushort)Location.FortSterling;
+               break;
+          }
           // Make the hash unique while also including anything that could change
           var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("s")}";
           var key = $"{message.Subject}-{hash}";
           if (!IsDupedMessage(logger, key))
           {
             OutgoingNatsConnection.Publish(marketOrdersDeduped, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(order)));
+            orderArray.Add(order);
           }
+        }
+
+        if (orderArray.Count > 0)
+        {
+          logger.LogInformation($"Found {orderArray.Count} New Market Orders - {DateTime.Now.ToLongTimeString()}");
+          OutgoingNatsConnection.Publish(marketOrdersDedupedBulk, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(orderArray)));
         }
       }
       catch (Exception ex)
