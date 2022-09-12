@@ -180,30 +180,29 @@ namespace albiondata_deduper_dotNet
           // Hack since albion seems to be multiplying every price by 10000?
           order.UnitPriceSilver /= 10000;
           // Make sure all caerleon markets are registered with the same ID since they have the same contents
-          if (order.LocationId == (ushort)Location.Caerleon2)
-          {
-            order.LocationId = (ushort)Location.Caerleon;
-          }
           // Into the Fray Portal Towns
           // Make sure all portal markets are registered with the same ID as their corresponding city as they have the same contents
-	  switch(order.LocationId)
+	    switch(order.LocationId)
           {
-          case (ushort)Location.ThetfordPortal:
-               order.LocationId = (ushort)Location.Thetford;
-               break;
-          case (ushort)Location.LymhurstPortal:
-               order.LocationId = (ushort)Location.Lymhurst;
-               break;
-          case (ushort)Location.BridgewatchPortal:
-               order.LocationId = (ushort)Location.Bridgewatch;
-               break;
-          case (ushort)Location.MartlockPortal:
-               order.LocationId = (ushort)Location.Martlock;
-               break;
-          case (ushort)Location.FortSterlingPortal:
-               order.LocationId = (ushort)Location.FortSterling;
-               break;
-          }
+            case (ushort)Location.Caerleon2:
+                order.LocationId = (ushort)Location.Caerleon;
+                break;
+            case (ushort)Location.ThetfordPortal:
+                 order.LocationId = (ushort)Location.Thetford;
+                 break;
+            case (ushort)Location.LymhurstPortal:
+                 order.LocationId = (ushort)Location.Lymhurst;
+                 break;
+            case (ushort)Location.BridgewatchPortal:
+                 order.LocationId = (ushort)Location.Bridgewatch;
+                 break;
+            case (ushort)Location.MartlockPortal:
+                 order.LocationId = (ushort)Location.Martlock;
+                 break;
+            case (ushort)Location.FortSterlingPortal:
+                 order.LocationId = (ushort)Location.FortSterling;
+                 break;
+            }
           // Make the hash unique while also including anything that could change
           var hash = $"{order.Id}|{order.LocationId}|{order.Amount}|{order.UnitPriceSilver}|{order.Expires.ToString("s")}";
           var key = $"{message.Subject}-{hash}";
@@ -246,9 +245,28 @@ namespace albiondata_deduper_dotNet
         }
 
         // Make sure all caerleon markets are registered with the same ID since they have the same contents
-        if (marketHistoriesUpload.LocationId == (ushort)Location.Caerleon2)
+        // Into the Fray Portal Towns
+        // Make sure all portal markets are registered with the same ID as their corresponding city as they have the same contents
+        switch (marketHistoriesUpload.LocationId)
         {
-          marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
+          case (ushort)Location.Caerleon2:
+            marketHistoriesUpload.LocationId = (ushort)Location.Caerleon;
+            break;
+          case (ushort)Location.ThetfordPortal:
+            marketHistoriesUpload.LocationId = (ushort)Location.Thetford;
+            break;
+          case (ushort)Location.LymhurstPortal:
+            marketHistoriesUpload.LocationId = (ushort)Location.Lymhurst;
+            break;
+          case (ushort)Location.BridgewatchPortal:
+            marketHistoriesUpload.LocationId = (ushort)Location.Bridgewatch;
+            break;
+          case (ushort)Location.MartlockPortal:
+            marketHistoriesUpload.LocationId = (ushort)Location.Martlock;
+            break;
+          case (ushort)Location.FortSterlingPortal:
+            marketHistoriesUpload.LocationId = (ushort)Location.FortSterling;
+            break;
         }
 
         // Lookup the unique name based on the numeric ID
