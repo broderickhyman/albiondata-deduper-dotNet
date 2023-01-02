@@ -129,7 +129,7 @@ namespace albiondata_deduper_dotNet
 
       logger.LogInformation($"Redis Connected: {RedisConnection.IsConnected}");
 
-      var itemIdFile = new HttpClient().GetStringAsync("https://raw.githubusercontent.com/broderickhyman/ao-bin-dumps/master/formatted/items.txt").Result;
+      var itemIdFile = new HttpClient().GetStringAsync("https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.txt").Result;
       foreach (var line in itemIdFile.Split("\n", StringSplitOptions.RemoveEmptyEntries))
       {
         var split = line.Split(':').Select(x => x.Trim());
